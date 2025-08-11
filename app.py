@@ -6,20 +6,21 @@ from flask_login import (
     login_user,
     login_required,
     logout_user,
-    current_user
+    current_user,
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 app.secret_key = "cualquiercosa"
-app.config['SQLALCHEMY_DATABASE_URI'] = "mysql+pymysql://root:@localhost/miniblog"
+app.config["SQLALCHEMY_DATABASE_URI"] = "mysql+pymysql://root:@localhost/miniblog"
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 
 login_manager = LoginManager(app)
-login_manager.login_view = 'login'
+login_manager.login_view = "login"
 
 from models import User, Post, Comentario, Categoria
+
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -31,74 +32,80 @@ def inject_categorias():
     return dict(categorias=Categoria.query.all())
 
 
-@app.route('/')
+@app.route("/")
 def index():
-    posts = Post.query.filter_by(is_active=True).order_by(Post.fecha_creacion.desc()).all()
-    return render_template('index.html', posts=posts)
+    posts = (
+        Post.query.filter_by(is_active=True).order_by(Post.fecha_creacion.desc()).all()
+    )
+    return render_template("index.html", posts=posts)
 
 
-@app.route('/register', methods=['GET', 'POST'])
+@app.route("/register", methods=["GET", "POST"])
 def register():
-    if request.method == 'POST':
-        username = request.form['username']
-        email = request.form['email']
-        password = request.form['password']
-    #Verificacion que no exista == usuario O == email
-        if User.query.filter((User.username == username) | (User.email == email)).first():
+    if request.method == "POST":
+        username = request.form["username"]
+        email = request.form["email"]
+        password = request.form["password"]
+        # Verificacion que no exista == usuario O == email
+        if User.query.filter(
+            (User.username == username) | (User.email == email)
+        ).first():
             flash("Usuario o email ya existe", "error")
-            return redirect(url_for('register'))
-    #Creacion de usuario
+            return redirect(url_for("register"))
+        # Creacion de usuario
         new_user = User(
             username=username,
             email=email,
-            #Hasheo de contrasenia
-            password_hash=generate_password_hash(password)
+            # Hasheo de contrasenia
+            password_hash=generate_password_hash(password),
         )
         db.session.add(new_user)
         db.session.commit()
         flash("Registro exitoso. Ahora puedes iniciar sesion.", "success")
-        return redirect(url_for('login'))
+        return redirect(url_for("login"))
 
-    return render_template('auth/register.html')
+    return render_template("auth/register.html")
 
 
-@app.route('/login', methods=['GET', 'POST'])
+@app.route("/login", methods=["GET", "POST"])
 def login():
-    if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
-    #Chequeo de que exista el usuario
+    if request.method == "POST":
+        username = request.form["username"]
+        password = request.form["password"]
+        # Chequeo de que exista el usuario
         usuario = User.query.filter_by(username=username).first()
-    #Comparar contrasenias - la hasheada y la comun
+        # Comparar contrasenias - la hasheada y la comun
         if usuario and check_password_hash(usuario.password_hash, password):
             login_user(usuario)
             flash("Sesión iniciada", "success")
-            return redirect(url_for('index'))
+            return redirect(url_for("index"))
         else:
             flash("Usuario o contraseña incorrectos", "error")
 
-    return render_template('auth/login.html')
+    return render_template("auth/login.html")
 
 
-@app.route('/logout')
+@app.route("/logout")
 @login_required
 def logout():
     logout_user()
     flash("Sesión cerrada", "success")
-    return redirect(url_for('index'))
+    return redirect(url_for("index"))
 
 
-@app.route('/post/new', methods=['GET', 'POST'])
+@app.route("/post/new", methods=["GET", "POST"])
 @login_required
 def new_post():
-    if request.method == 'POST':
-        titulo = request.form['titulo']
-        contenido = request.form['contenido']
+    if request.method == "POST":
+        titulo = request.form["titulo"]
+        contenido = request.form["contenido"]
         # Obtenemos todos los valores de los checkboxes marcados
-        categorias_ids = request.form.getlist('categorias_seleccionadas')
+        categorias_ids = request.form.getlist("categorias_seleccionadas")
 
-        nuevo_post = Post(titulo=titulo, contenido=contenido, usuario_id=current_user.id)
-        
+        nuevo_post = Post(
+            titulo=titulo, contenido=contenido, usuario_id=current_user.id
+        )
+
         if categorias_ids:
             # Buscamos los objetos Categoria correspondientes a los IDs
             categorias = Categoria.query.filter(Categoria.id.in_(categorias_ids)).all()
@@ -107,55 +114,57 @@ def new_post():
 
         db.session.add(nuevo_post)
         db.session.commit()
-        
+
         flash("Post creado correctamente", "success")
-        return redirect(url_for('index'))
+        return redirect(url_for("index"))
 
-    return render_template('new_post.html')
+    return render_template("new_post.html")
 
 
-@app.route('/post/<int:post_id>', methods=['GET', 'POST'])
+@app.route("/post/<int:post_id>", methods=["GET", "POST"])
 def post_detail(post_id):
     post = Post.query.get_or_404(post_id)
 
-    if request.method == 'POST' and current_user.is_authenticated:
-        texto = request.form['texto']
-        comentario = Comentario(texto=texto, usuario_id=current_user.id, post_id=post.id)
+    if request.method == "POST" and current_user.is_authenticated:
+        texto = request.form["texto"]
+        comentario = Comentario(
+            texto=texto, usuario_id=current_user.id, post_id=post.id
+        )
         db.session.add(comentario)
         db.session.commit()
         flash("Comentario agregado", "success")
-        return redirect(url_for('post_detail', post_id=post.id))
+        return redirect(url_for("post_detail", post_id=post.id))
 
-    return render_template('post_detail.html', post=post)
+    return render_template("post_detail.html", post=post)
 
 
-@app.route('/post/edit/<int:post_id>', methods=['GET', 'POST'])
+@app.route("/post/edit/<int:post_id>", methods=["GET", "POST"])
 @login_required
 def edit_post(post_id):
     post = Post.query.get_or_404(post_id)
     # Solo el autor puede editar
     if post.usuario_id != current_user.id:
-        abort(403) # Error de "Forbidden"
+        abort(403)  # Error de "Forbidden"
 
-    if request.method == 'POST':
-        post.titulo = request.form['titulo']
-        post.contenido = request.form['contenido']
-        
+    if request.method == "POST":
+        post.titulo = request.form["titulo"]
+        post.contenido = request.form["contenido"]
+
         # Actualizar categorías
-        categorias_ids = request.form.getlist('categorias_seleccionadas')
-        post.categorias.clear() # Limpiar las categorías existentes
+        categorias_ids = request.form.getlist("categorias_seleccionadas")
+        post.categorias.clear()  # Limpiar las categorías existentes
         if categorias_ids:
             categorias = Categoria.query.filter(Categoria.id.in_(categorias_ids)).all()
             post.categorias.extend(categorias)
 
         db.session.commit()
         flash("Post actualizado correctamente", "success")
-        return redirect(url_for('post_detail', post_id=post.id))
+        return redirect(url_for("post_detail", post_id=post.id))
 
-    return render_template('edit_post.html', post=post)
+    return render_template("edit_post.html", post=post)
 
 
-@app.route('/post/delete/<int:post_id>', methods=['POST'])
+@app.route("/post/delete/<int:post_id>", methods=["POST"])
 @login_required
 def delete_post(post_id):
     post = Post.query.get_or_404(post_id)
@@ -166,19 +175,22 @@ def delete_post(post_id):
     # Eliminado lógico
     post.is_active = False
     db.session.commit()
-    
+
     flash("Post eliminado correctamente", "success")
-    return redirect(url_for('index'))
+    return redirect(url_for("index"))
 
 
-@app.route('/comment/delete/<int:comment_id>', methods=['POST'])
+@app.route("/comment/delete/<int:comment_id>", methods=["POST"])
 @login_required
 def delete_comment(comment_id):
     comment = Comentario.query.get_or_404(comment_id)
-    post_id = comment.post_id # Guardamos el ID para la redirección
+    post_id = comment.post_id  # Guardamos el ID para la redirección
 
-    #El autor del comentario O el autor del post pueden eliminar el comentario
-    if current_user.id != comment.usuario_id and current_user.id != comment.post.usuario_id:
+    # El autor del comentario O el autor del post pueden eliminar el comentario
+    if (
+        current_user.id != comment.usuario_id
+        and current_user.id != comment.post.usuario_id
+    ):
         abort(403)
 
     # Eliminado directo de la base de datos
@@ -186,4 +198,4 @@ def delete_comment(comment_id):
     db.session.commit()
 
     flash("Comentario eliminado", "success")
-    return redirect(url_for('post_detail', post_id=post_id))
+    return redirect(url_for("post_detail", post_id=post_id))
